@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Student Enrollment Form</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/css/bootstrap.min.css" media="print" onload="this.media='all'">
+    <script defer src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <script defer src="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/js/bootstrap.min.js"></script>
+    <script defer src="http://login2explore.com/jpdb/resources/js/0.0.3/jpdb-commons.js"></script>
+</head>
+<body>
+<div class="container">
+    <h2>Student Enrollment Form</h2>
+    <form id="studentForm">
+        <div class="form-group">
+            <label for="rollNo">Roll No:</label>
+            <input type="text" class="form-control" id="rollNo" placeholder="Enter Roll No" required>
+        </div>
+        <div class="form-group">
+            <label for="fullName">Full Name:</label>
+            <input type="text" class="form-control" id="fullName" placeholder="Enter Full Name">
+        </div>
+        <div class="form-group">
+            <label for="class">Class:</label>
+            <input type="text" class="form-control" id="class" placeholder="Enter Class">
+        </div>
+        <div class="form-group">
+            <label for="birthDate">Birth Date:</label>
+            <input type="date" class="form-control" id="birthDate">
+        </div>
+        <div class="form-group">
+            <label for="address">Address:</label>
+            <input type="text" class="form-control" id="address" placeholder="Enter Address">
+        </div>
+        <div class="form-group">
+            <label for="enrollDate">Enrollment Date:</label>
+            <input type="date" class="form-control" id="enrollDate">
+        </div>
+        <button type="button" class="btn btn-primary" id="saveBtn" onclick="saveStudent()">Save</button>
+        <button type="button" class="btn btn-success" id="updateBtn" onclick="updateStudent()">Update</button>
+        <button type="button" class="btn btn-warning" id="resetBtn" onclick="resetForm()">Reset</button>
+    </form>
+</div>
+
+<script>
+const TOKEN = "90934479|-31949223697138954|90962699";
+const BASE_URL = "http://api.login2explore.com:5577";
+const DATABASE = "SCHOOL-D";
+const RELATION = "STUDENT-TAB";
+
+// Cache DOM elements
+const form = document.getElementById('studentForm');
+const rollNoInput = document.getElementById('rollNo');
+const formInputs = {
+    fullName: document.getElementById('fullName'),
+    class: document.getElementById('class'),
+    birthDate: document.getElementById('birthDate'),
+    address: document.getElementById('address'),
+    enrollDate: document.getElementById('enrollDate')
+};
+const buttons = {
+    save: document.getElementById('saveBtn'),
+    update: document.getElementById('updateBtn'),
+    reset: document.getElementById('resetBtn')
+};
+
+// Store record number for update
+let currentRecordNo = "";
+
+// Request queue for handling async requests
+const requestQueue = {
+    queue: [],
+    processing: false,
+    
+    add: function(request) {
+        this.queue.push(request);
+        if (!this.processing) {
+            this.processQueue();
+        }
+    },
+    
+    processQueue: function() {
+        if (this.queue.length === 0) {
+            this.processing = false;
+            return;
+        }
+        
+        this.processing = true;
+        const request = this.queue.shift();
+        
+        try {
+            request(() => {
+                setTimeout(() => this.processQueue(), 0);
+            });
+        } catch (error) {
+            console.error('Request failed:', error);
+            this.processQueue();
+        }
+    }
+};
+
+function debounce(func, wait) {
+    let timeout;
+    return function(...args) {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(this, args), wait);
+    };
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    rollNoInput.focus();
+    disableFields(true);
+    
+    rollNoInput.addEventListener('input', debounce((e) => {
+        const rollNo = e.target.value.trim();
+        if (rollNo) {
+            fetchStudent(rollNo);
+        }
+    }, 300));
+});
+
+function disableFields(disable) {
+    Object.values(formInputs).forEach(input => input.disabled = disable);
+    Object.values(buttons).forEach(button => button.disabled = disable);
+}
+
+// function validateAndGetFormData() {
+//     const formData = {
+        
+//         address: formInputs.address.value.trim(),
+//         birthDate: formInputs.birthDate.value.trim(),
+        
+//         enrollDate: formInputs.enrollDate.value.trim(),
+//         fullName: formInputs.fullName.value.trim(),
+//         rollNo: rollNoInput.value.trim(),
+//         studentClass: formInputs.class.value.trim()
+
+//     };
+
+//     if (Object.values(formData).some(value => !value)) {
+//         alert("All fields are required!");
+//         return null;
+//     }
+
+//     return JSON.stringify({
+//         rollNo: formData.rollNo,
+//         fullName: formData.fullName,
+//         studentClass: formData.studentClass,
+//         birthDate: formData.birthDate,
+//         address: formData.address,
+//         enrollDate: formData.enrollDate
+//     });
+// }
+function validateAndGetFormData() {
+    const formData = {
+        address: formInputs.address.value.trim(),
+        birthDate: formInputs.birthDate.value.trim(),
+        enrollDate: formInputs.enrollDate.value.trim(),
+        fullName: formInputs.fullName.value.trim(),
+        rollNo: rollNoInput.value.trim(),
+        studentClass: formInputs.class.value.trim()
+    };
+
+    // Check each field and alert specific messages if they are empty
+    if (!formData.rollNo) {
+        alert("Roll No is required!");
+        rollNoInput.focus();
+        return null;
+    }
+    if (!formData.fullName) {
+        alert("Full Name is required!");
+        formInputs.fullName.focus();
+        return null;
+    }
+    if (!formData.studentClass) {
+        alert("Class is required!");
+        formInputs.class.focus();
+        return null;
+    }
+    if (!formData.birthDate) {
+        alert("Birth Date is required!");
+        formInputs.birthDate.focus();
+        return null;
+    }
+    if (!formData.address) {
+        alert("Address is required!");
+        formInputs.address.focus();
+        return null;
+    }
+    if (!formData.enrollDate) {
+        alert("Enrollment Date is required!");
+        formInputs.enrollDate.focus();
+        return null;
+    }
+
+    return JSON.stringify(formData);
+}
+function resetForm() {
+    form.reset();
+    rollNoInput.focus();
+    disableFields(true);
+    rollNoInput.disabled = false;
+    buttons.save.disabled = true;
+    buttons.update.disabled = true;
+    currentRecordNo = "";
+}
+
+function fetchStudent(rollNo) {
+    if (!rollNo) return;
+
+    const jsonStr = {
+        rollNo: rollNo
+    };
+    
+    const getRequest = createGET_BY_KEYRequest(
+        TOKEN,
+        DATABASE,
+        RELATION,
+        JSON.stringify(jsonStr)
+    );
+    
+    requestQueue.add((next) => {
+        jQuery.ajaxSetup({async: false});
+        const result = executeCommandAtGivenBaseUrl(
+            getRequest,
+            BASE_URL,
+            "/api/irl"
+        );
+        jQuery.ajaxSetup({async: true});
+
+        if (result.status === 200) {
+            try {
+                const data = JSON.parse(result.data);
+                if (data.record) {
+                    currentRecordNo = data.rec_no;
+
+                    const mappedData = {
+                        fullName: data.record.fullName || '',
+                        class: data.record.studentClass || '',
+                        birthDate: data.record.birthDate || '',
+                        address: data.record.address || '',
+                        enrollDate: data.record.enrollDate || ''
+                    };
+                    
+                    Object.entries(mappedData).forEach(([key, value]) => {
+                        if (formInputs[key]) {
+                            formInputs[key].value = value;
+                        }
+                    });
+                    
+                    disableFields(false);
+                    rollNoInput.disabled = true;
+                    buttons.save.disabled = true;
+                    buttons.update.disabled = false;
+                } else {
+                    handleNewRecord();
+                }
+            } catch (error) {
+                console.error('Data parsing failed:', error);
+                handleNewRecord();
+            }
+        } else {
+            handleNewRecord();
+        }
+        next();
+    });
+}
+
+function handleNewRecord() {
+    disableFields(false);
+    rollNoInput.disabled = false;
+    buttons.save.disabled = false;
+    buttons.update.disabled = true;
+    Object.values(formInputs).forEach(input => input.value = '');
+    currentRecordNo = "";
+}
+
+function saveStudent() {
+    const jsonData = validateAndGetFormData();
+    if (!jsonData) return;
+
+    const putRequest = createPUTRequest(TOKEN, jsonData, DATABASE, RELATION);
+    
+    requestQueue.add((next) => {
+        jQuery.ajaxSetup({async: false});
+        const result = executeCommandAtGivenBaseUrl(
+            putRequest,
+            BASE_URL,
+            "/api/iml"
+        );
+        jQuery.ajaxSetup({async: true});
+        
+        alert(result.message);
+        resetForm();
+        next();
+    });
+}
+
+function updateStudent() {
+    const jsonData = validateAndGetFormData();
+    if (!jsonData) return;
+
+    if (!currentRecordNo) {
+        alert("Error: Record number not found. Please search for the record again.");
+        return;
+    }
+
+    // Parse the form data
+    const formData = JSON.parse(jsonData);
+    
+    // Create the jsonStr with the correct format
+    const jsonStrObj = {};
+    jsonStrObj[currentRecordNo] = {
+        rollNo: formData.rollNo,
+        fullName: formData.fullName,
+        studentClass: formData.studentClass,
+        birthDate: formData.birthDate,
+        address: formData.address,
+        enrollDate: formData.enrollDate
+    };
+
+    // Prepare the request object
+    const req = {
+        token: TOKEN,
+        dbName: DATABASE,
+        cmd: "UPDATE",
+        rel: RELATION,
+        jsonStr: JSON.stringify(jsonStrObj)
+    };
+
+    console.log('Update Request:', req); // For debugging
+
+    requestQueue.add((next) => {
+        jQuery.ajaxSetup({ async: false });
+        
+        try {
+            // Use the JPdb library's executeCommand function
+            const result = executeCommand(req, BASE_URL, "/api/iml");
+            
+            console.log('Update Response:', result);
+            
+            if (result.status === 200) {
+                alert("Record updated successfully");
+            } else {
+                alert("Error updating record: " + (result.message || "Unknown error"));
+            }
+        } catch (error) {
+            console.error("Update failed:", error);
+            alert("Failed to update record. Please try again.");
+        } finally {
+            jQuery.ajaxSetup({ async: true });
+            resetForm();
+            next();
+        }
+    });
+}
+
+// Also update the fetchStudent function with better error handling
+function updateStudent() {
+    const jsonData = validateAndGetFormData();
+    if (!jsonData) return;
+
+    if (!currentRecordNo) {
+        alert("Error: Record number not found. Please search for the record again.");
+        return;
+    }
+
+    try {
+        // Parse the form data
+        const formData = JSON.parse(jsonData);
+        
+        // Clean the class data before updating
+        const cleanedClass = formData.studentClass.toString().trim();
+        
+        // Create the update request using the library function
+        const updateRequest = createUPDATERecordRequest(
+            TOKEN,
+            JSON.stringify({
+                [currentRecordNo]: {
+                    rollNo: formData.rollNo.trim(),
+                    fullName: formData.fullName.trim(),
+                    studentClass: cleanedClass, // Use cleaned class value
+                    birthDate: formData.birthDate.trim(),
+                    address: formData.address.trim(),
+                    enrollDate: formData.enrollDate.trim()
+                }
+            }),
+            DATABASE,
+            RELATION,
+            currentRecordNo
+        );
+
+        requestQueue.add((next) => {
+            jQuery.ajaxSetup({ async: false });
+            
+            try {
+                const result = executeCommandAtGivenBaseUrl(
+                    updateRequest,
+                    BASE_URL,
+                    "/api/iml"
+                );
+                
+                if (result.status === 200) {
+                    alert("Record updated successfully");
+                } else {
+                    alert("Error updating record: " + (result.message || "Unknown error"));
+                }
+            } catch (error) {
+                console.error("Update execution failed:", error);
+                alert("Failed to update record. Please try again.");
+            } finally {
+                jQuery.ajaxSetup({ async: true });
+                resetForm();
+                next();
+            }
+        });
+    } catch (error) {
+        console.error("JSON processing failed:", error);
+        alert("Failed to process form data. Please try again.");
+    }
+}
+
+// Also update the validateAndGetFormData function to properly handle the class field
+function validateAndGetFormData() {
+    const formData = {
+        address: formInputs.address.value.trim(),
+        birthDate: formInputs.birthDate.value.trim(),
+        enrollDate: formInputs.enrollDate.value.trim(),
+        fullName: formInputs.fullName.value.trim(),
+        rollNo: rollNoInput.value.trim(),
+        studentClass: formInputs.class.value.trim()
+    };
+
+    if (Object.values(formData).some(value => !value)) {
+        alert("All fields are required!");
+        return null;
+    }
+
+    return JSON.stringify(formData);
+}
+
+
+</script>
+</body>
+</html>
